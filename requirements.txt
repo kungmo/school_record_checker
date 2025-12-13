@@ -1,0 +1,18 @@
+# Core Framework
+chainlit
+langchain
+langchain-core
+
+# AI Models (Google Gemini)
+langchain-google-genai
+google-api-core
+
+# Data Processing
+pandas
+numpy
+openpyxl
+tabulate
+
+# Database & Environment
+pymysql
+python-dotenv
