@@ -16,7 +16,7 @@ import pymysql.cursors
 import openpyxl
 from tabulate import tabulate
 
-# .env 파일 로드
+# .env 파일 로드`
 load_dotenv()
 
 # 실제 분석에 사용할 메인 모델
@@ -119,8 +119,11 @@ PROMPTS = {
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 학생이 '대회'에 참석했거나 특정 '강사'의 활동에 참여했다거나 '논문'을 썼다는 내용이 있는지 점검한다.
     5. 불필요하게 영어 및 외국어로 서술했는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
@@ -137,23 +140,26 @@ PROMPTS = {
 # Role: 고등학교 과목별 세부능력 및 특기사항 내용을 꼼꼼히 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
-# 생활기록부 본문 내용 parsing 상태: 교사가 쓴 세부능력 및 특기사항의 dataframe을 tabulate하여 markdown 형식으로 쓰여 있다.
+# 생활기록부 본문 내용 parsing 상태: [과목명] (학생 이름) (학생 반과 번호)에 따라 교사가 쓴 세부능력 및 특기사항이 쓰여 있다.
 # To Dos:
     1. 오타가 있는 경우 반드시 알려줘야 한다.
     2. 문장 자체에 내재된 언어학적인 오류 여부를 점검한다.
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 학생이 '대회'에 참석했거나 특정 '강사'의 활동에 참여했다거나 '논문'을 썼다는 내용이 있는지 점검한다.
     5. 불필요하게 영어 및 외국어로 서술했는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
-### 학생 반/번호: (학생 반/번호), 학생 이름: (학생명), 과목: (검토한 과목)
+### 과목: (검토한 과목), 학생 반, 번호: (학생 반, 번호), 학생 이름: (학생명)
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
 
-### 학생 반/번호: (학생 반/번호), 학생 이름: (학생명), 과목: (검토한 과목)
+### 과목: (검토한 과목), 학생 반, 번호: (학생 반, 번호), 학생 이름: (학생명)
 ...
 
 ## [종합 검토 의견]
@@ -166,8 +172,11 @@ PROMPTS = {
     1. 오타가 있는 경우 반드시 알려줘야 한다.
     2. 문장 자체에 내재된 언어학적인 오류 여부를 점검한다.
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
-    4. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    5. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    4. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    5. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
@@ -180,7 +189,7 @@ PROMPTS = {
 
 ## [종합 검토 의견]
 - **주요 수정 사항 요약**: (반드시 고쳐야 할 부분 리스트)""",
-    "창의적 체험활동": """
+    "창의적 체험활동 (고등학교 2-3학년, 현재학년)": """
 # Role: 고등학교 창의적 체험활동 생활기록부를 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
@@ -190,18 +199,45 @@ PROMPTS = {
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 동아리 활동에 쓰여 있는 두 괄호 속의 시간이 서로 다른 경우 반드시 알려줘야 한다.
     5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
-### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년)
+### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년), 영역: (자율/동아리/진로)
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
 
 ### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
-    "창의적 체험활동 (영역별)": """
-# Role: 고등학교 창의적 체험활동 생활기록부(영역별)를 검토하는 동료 선생님
+    "창의적 체험활동 (고등학교 2-3학년, 활동별)": """
+# Role: 고등학교 창의적 체험활동 생활기록부를 검토하는 동료 선생님
+# 시점: 현재 연도는 2025년이다.
+# 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
+# 생활기록부 본문 내용 parsing 상태: 교사가 쓴 창의적 체험활동(자율, 동아리, 진로)의 dataframe을 markdown 형식으로 정리해 두었다.
+# To Dos:
+    1. 오타가 있는 경우 반드시 알려줘야 한다.
+    2. 문장 자체에 내재된 언어학적인 오류 여부를 점검한다.
+    3. [중요] 교사의 입장에서 서술했는지 점검한다.
+    4. 동아리 활동에 쓰여 있는 두 괄호 속의 시간이 서로 다른 경우 반드시 알려줘야 한다.
+    5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
+# [중요] 답변 출력 형식:
+반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
+## [학생별 정밀 검토]
+### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년), 영역: (자율/동아리/진로)
+- **검토 결과**: [적절 / 수정 필요 / 오류]
+- **상세 내용**: (내용 작성)
+
+### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
+    "창의적 체험활동 (중학교, 활동별)": """
+# Role: 고등학교 창의적 체험활동 생활기록부를 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
 # To Dos:
@@ -210,18 +246,21 @@ PROMPTS = {
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 동아리 활동에 쓰여 있는 이수 시간과 괄호 속에 쓰여 있는 시 간들의 합이 서로 다른 경우 반드시 알려줘야 한다.
     5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
-제공된 자료의 순서에 따라 영역별로 결과를 생성하시오.
+제공된 자료의 순서에 따라 활동별로 결과를 생성하시오.
 ## [(영역명)]
-### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년)
+### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년), 영역: (자율/동아리/진로)
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
 
 ### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
-    "창의적 체험활동 (2025 개정 1학년용)": """
+    "창의적 체험활동 (고등학교 1학년, 현재학년)": """
 # Role: 고등학교 창의적 체험활동 생활기록부를 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
@@ -231,15 +270,39 @@ PROMPTS = {
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 동아리 활동에 쓰여 있는 두 괄호 속의 시간이 서로 다른 경우 반드시 알려줘야 한다.
     5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
-### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년)
+### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년), 영역: (자율/동아리/진로)
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
-
+### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
+    "창의적 체험활동 (고등학교 1학년, 활동별)": """
+# Role: 고등학교 창의적 체험활동 생활기록부를 검토하는 동료 선생님
+# 시점: 현재 연도는 2025년이다.
+# 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
+# To Dos:
+    1. 오타가 있는 경우 반드시 알려줘야 한다.
+    2. 문장 자체에 내재된 언어학적인 오류 여부를 점검한다.
+    3. [중요] 교사의 입장에서 서술했는지 점검한다.
+    4. 동아리 활동에 쓰여 있는 두 괄호 속의 시간이 서로 다른 경우 반드시 알려줘야 한다.
+    5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
+# [중요] 답변 출력 형식:
+반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
+## [학생별 정밀 검토]
+### 학생 번호: 1, 학생 이름: (학생명), 학년: (O학년), 영역: (자율/동아리/진로)
+- **검토 결과**: [적절 / 수정 필요 / 오류]
+- **상세 내용**: (내용 작성)
 ### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
     "동아리 (교사 입력 엑셀 데이터 파일)": """
 # Role: 고등학교 동아리 특기사항 내용을 꼼꼼히 검토하는 동료 선생님
@@ -252,8 +315,11 @@ PROMPTS = {
     3. [중요] 교사의 입장에서 서술했는지 점검한다.
     4. 학생이 '대회'에 참석했거나 '논문'을 썼다는 내용이 있는지 점검한다.
     5. 특정 기관 및 상호명, 강사명, 대회 참가 내용이 쓰여 있는지 점검한다.
-    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 확인 후 수정을 권해야 한다.
-    7. 문장이 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+    6. 문장 중에 '[공백2칸]' 또는 '[공백3칸이상]' 표시가 있으면 띄어쓰기가 중복된 곳일 수 있는 확률이 있으므로 사용자에게 위치를 구체적으로 알려주면서 수정을 권한다.
+    7. 문장의 종결부(마침표 직전)만 명사형 종결어미로 끝나고, 현재형으로 쓰였는지 점검한다.
+       - 바른 예: ~함. ~음.
+       - 틀린 예: ~한다. ~했다.
+       - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
@@ -379,16 +445,54 @@ def excel_to_clean_markdown_subject(file_path):
 
 # --- 과목별 세부능력 및 특기사항 (교사 입력 엑셀 파일) ---
 def xlsx_subject_to_markdown(file_path):
-    df = pd.read_excel(file_path, engine='openpyxl', usecols=['과목', '반/번호', '성명', '세부능력 및 특기사항'])
+    """
+    엑셀 파일을 읽어 LLM이 이해하기 쉬운 구조화된 Markdown 텍스트로 변환합니다.
+    표(Table) 형식이 아닌, 학생별 섹션(Section) 형식으로 변환하여 가독성을 높입니다.
+    """
+    # 1. 엑셀 읽기
+    # dtype=str 옵션을 주어 '반/번호'가 날짜(예: 2월 4일)로 자동 변환되는 것을 방지합니다.
+    try:
+        df = pd.read_excel(file_path, engine='openpyxl', dtype=str)
+    except Exception as e:
+        return f"파일을 읽는 중 오류가 발생했습니다: {e}"
+
+    # 2. 필요한 컬럼 존재 여부 확인 및 추출
+    required_cols = ['과목', '반/번호', '성명', '세부능력 및 특기사항']
+    missing_cols = [col for col in required_cols if col not in df.columns]
     
-    # 3. 필요한 열만 선택 ('성명'은 아직 이름이 바뀌기 전이므로 그대로 선택)
-    # 파일 내 실제 컬럼명: 과목, 반/번호, 성명, 세부능력 및 특기사항
-    df_selected = df[['과목', '반/번호', '성명', '세부능력 및 특기사항']]
+    if missing_cols:
+        return f"다음 필수 컬럼이 엑셀 파일에 없습니다: {missing_cols}"
     
-    # 4. 컬럼 이름 변경 ('성명' -> '이름')
-    df_final = df_selected.rename(columns={'성명': '이름'})
-    contents = df_final.to_markdown(index=False)
-    return contents
+    df = df[required_cols].fillna('') # 결측치는 빈 문자열로 처리
+
+    # 3. Markdown 텍스트 생성 (표 대신 문서 구조화)
+    markdown_lines = []
+    markdown_lines.append("# 과목별 세부능력 및 특기사항 기록")
+    markdown_lines.append("---")
+
+    for _, row in df.iterrows():
+        subject = row['과목'].strip()
+        name = row['성명'].strip()
+        content = row['세부능력 및 특기사항'].strip()
+        class_info_raw = row['반/번호'].strip()
+
+        # 반/번호 포맷팅 (예: "2/4" -> "2반 4번"으로 변환하여 명확성 확보)
+        if '/' in class_info_raw:
+            parts = class_info_raw.split('/')
+            if len(parts) == 2:
+                class_info = f"{parts[0]}반 {parts[1]}번"
+            else:
+                class_info = class_info_raw
+        else:
+            class_info = class_info_raw
+
+        # LLM에게 최적화된 포맷: 헤더로 학생 구분 -> 메타데이터 -> 내용
+        markdown_lines.append(f"## [{subject}] {name} ({class_info})")
+        markdown_lines.append(f"> **세부능력 및 특기사항**")
+        markdown_lines.append(f"{content}")
+        markdown_lines.append("\n---\n") # 섹션 구분선
+
+    return "\n".join(markdown_lines)
 
 
 # --- 행동특성 및 종합의견 변환 함수 ---
@@ -444,10 +548,7 @@ def xlsx_behavior_to_markdown(file_path):
     df = df.replace(r'^\s*$', np.nan, regex=True)
 
     # 5. 데이터 정제 (Garbage 제거)
-    # [수정] '범박고등학교' 제거 -> 정규식으로 처리할 예정이므로 리스트에서 뺌
     keywords_to_remove = ['학교생활기록부', '사용자명', '담당교사']
-    
-    # [수정] 학교명 패턴 컴파일 (행 전체가 OO초/중/고등학교 인 경우)
     school_pattern = re.compile(r'^\s*.*(?:초등|중|고등)학교\s*$')
 
     def is_garbage(row):
@@ -535,7 +636,7 @@ def xlsx_behavior_to_markdown(file_path):
 
     return "".join(markdown_lines)
 
-# 창의적 체험활동 xlsx 파일 처리
+# 창의적 체험활동 (고등학교 2-3학년, 현재학년) xlsx 파일 처리
 def xlsx_creative_activity_to_markdown(file_path):
     # 1. 파일 불러오기
     df = pd.read_excel(file_path, engine='openpyxl', header=None)
@@ -558,9 +659,7 @@ def xlsx_creative_activity_to_markdown(file_path):
     if df.shape[1] > 4:
         df = df[df.iloc[:, 4] != '영역']
     
-    # [수정] 13번째 열에 학교명이 들어가는 경우가 많음
-    # 기존: df = df[df.iloc[:, 13] != '범박고등학교']
-    # 변경: '~학교'로 끝나는 텍스트가 있으면 해당 행 제거
+    # '~학교'로 끝나는 텍스트가 있으면 해당 행 제거
     if df.shape[1] > 13:
         # (?: ... )는 비캡처 그룹, $는 문자열 끝을 의미
         df = df[~df.iloc[:, 13].astype(str).str.contains(r'(?:초등|중|고등)학교$', regex=True, na=False)]
@@ -653,8 +752,137 @@ def xlsx_creative_activity_to_markdown(file_path):
     contents = generate_markdown(df_final)
     return contents
 
-# 창의적 체험활동 (영역별)
-def xlsx_creative_activity_to_markdown_sectional(file_path):
+# 창의적 체험활동 (고등학교 2-3학년, 활동별)
+def xlsx_creative_activity_to_markdown_sectional_high(input_xlsx):
+    """
+    엑셀 파일을 읽어 창의적 체험활동 데이터를 추출하고,
+    공백 검출 함수를 적용한 뒤 Markdown Table 문자열로 반환합니다.
+    """
+    
+    # 1. 파일 확장자에 따른 처리 방식 결정
+    file_type = 'xlsx' if input_xlsx.endswith('.xlsx') else 'csv'
+    rows = []
+
+    # 2. 파일 읽기
+    if file_type == 'xlsx':
+        wb = openpyxl.load_workbook(input_xlsx, data_only=True)
+        # sheet1 혹은 활성 시트 선택
+        if 'sheet1' in [s.lower() for s in wb.sheetnames]:
+            sheet_name = [s for s in wb.sheetnames if s.lower() == 'sheet1'][0]
+            ws = wb[sheet_name]
+        else:
+            ws = wb.active
+        
+        # openpyxl로 데이터 읽기
+        rows = list(ws.iter_rows(values_only=True))
+
+    elif file_type == 'csv':
+        with open(input_xlsx, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            rows = [ [ (c if c.strip() != '' else None) for c in r ] for r in reader ]
+
+    # 3. 데이터 처리
+    processed_data = []
+    current_record = None
+    
+    # 엑셀 열 인덱스 (0부터 시작)
+    IDX_NO = 1       # B
+    IDX_NAME = 2     # C
+    IDX_GRADE = 4    # E
+    IDX_AREA = 5     # F
+    IDX_TIME = 7     # H
+    IDX_SPEC = 9     # J
+    IDX_HOPE = 13    # N
+
+    for row in rows:
+        if len(row) <= IDX_SPEC:
+            continue
+            
+        val_no = row[IDX_NO]
+        val_name = row[IDX_NAME]
+        val_spec = row[IDX_SPEC]
+        
+        # 문자열 변환
+        str_no = str(val_no).strip() if val_no else ""
+        str_name = str(val_name).strip() if val_name else ""
+        
+        # 헤더/푸터 필터링
+        is_header = "번 호" in str_no or "성  명" in str_name or "창의적 체험활동상황" in str_name
+        # '초등학교', '중학교', '고등학교'가 포함되어 있는지 정규식으로 확인
+        is_school_name = re.search(r"(초등학교|중학교|고등학교)", str_name)
+        is_footer = is_school_name or (str_no.isdigit() and "/" in str_name)
+
+        if is_header or is_footer:
+            continue
+        
+        # [새 레코드]
+        if val_no is not None and str_no.isdigit():
+            if current_record:
+                processed_data.append(current_record)
+            
+            current_record = {
+                '번호': val_no,
+                '성명': val_name,
+                '학년': row[IDX_GRADE],
+                '영역': row[IDX_AREA],
+                '시간': row[IDX_TIME],
+                '특기사항_parts': [val_spec] if val_spec else [],
+                '희망분야': row[IDX_HOPE] if len(row) > IDX_HOPE else None
+            }
+        
+        # [내용 이어짐]
+        elif current_record is not None:
+            if val_spec:
+                current_record['특기사항_parts'].append(val_spec)
+            
+            if len(row) > IDX_HOPE and row[IDX_HOPE]:
+                if not current_record['희망분야']:
+                    current_record['희망분야'] = row[IDX_HOPE]
+
+    if current_record:
+        processed_data.append(current_record)
+
+    # 4. 최종 데이터 구성
+    final_list = []
+    for item in processed_data:
+        # 페이지 넘김 병합 (공백 1칸)
+        parts = [str(p).strip() for p in item['특기사항_parts'] if p]
+        full_specialty = " ".join(parts)
+        
+        hope_field = str(item['희망분야']).strip() if item['희망분야'] else ""
+        
+        # 진로활동 희망분야 처리
+        if item['영역'] and "진로활동" in str(item['영역']):
+            full_specialty = re.sub(r'^희망분야[:]?\s*', '', full_specialty)
+            
+            if hope_field:
+                full_specialty = f"희망분야: {hope_field}\n{full_specialty}"
+        
+        # [공백 검출 함수 적용] 최종 텍스트에 대해 공백 검사 수행
+        full_specialty = mark_multiple_spaces(full_specialty)
+
+        final_list.append({
+            '번호': item['번호'],
+            '성명': item['성명'],
+            '학년': item['학년'],
+            '영역': item['영역'],
+            '시간': item['시간'],
+            '특기사항': full_specialty
+        })
+
+    # 5. DataFrame 생성 및 Markdown 변환
+    df = pd.DataFrame(final_list)
+    
+    if df.empty:
+        return ""
+    
+    # tabulate로 Markdown 변환
+    markdown_output = tabulate(df, headers='keys', tablefmt='github', showindex=False)
+    
+    return markdown_output
+
+# 창의적 체험활동 (중학교, 활동별)
+def xlsx_creative_activity_to_markdown_sectional_mid(file_path):
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
         ws = wb.active
@@ -759,10 +987,9 @@ def xlsx_creative_activity_to_markdown_sectional(file_path):
         return "".join(markdown_output)
 
     except Exception as e:
-        return f"오류: 창의적 체험활동(영역별) 처리 중 문제가 발생했습니다. {str(e)}"
+        return f"오류: 창의적 체험활동(중학교, 활동별) 처리 중 문제가 발생했습니다. {str(e)}"
 
-# 창의적 체험활동 (1학년용)
-# 창의적 체험활동 (1학년용) - 오류 수정 버전
+# 창의적 체험활동 (고등학교 1학년, 현재학년)
 def xlsx_creative_activity_to_markdown_1st_year(file_path):
     # 1. 엑셀 파일 로드
     df = pd.read_excel(file_path, sheet_name='sheet1', engine='openpyxl', header=None)
@@ -857,6 +1084,150 @@ def xlsx_creative_activity_to_markdown_1st_year(file_path):
     
     return contents
 
+# 창의적 체험활동 (1학년, 활동별)
+def xlsx_creative_activity_to_markdown_1st_year_sectional(file_path):
+
+    # 창의적 체험활동 (1학년, 활동별) markdown으로 바꾸는 함수
+    def df_to_llm_markdown(df):
+        """
+        DataFrame을 LLM이 이해하기 쉬운 Markdown 형식의 텍스트로 변환합니다.
+        """
+        if df.empty:
+            return "데이터가 없습니다."
+    
+        markdown_lines = []
+        
+        for index, row in df.iterrows():
+            # 각 행(row)을 하나의 섹션으로 구성
+            section = (
+                f"## 학생 정보: {row['번호']} {row['성명']}\n"
+                f"- **학년**: {row['학년']}\n"
+                f"- **영역**: {row['영역']}\n"
+                f"- **이수 시간**: {row['시간']}\n"
+                f"- **특기사항**:\n"
+                f"{row['특기사항']}\n"
+            )
+            markdown_lines.append(section)
+        
+        # 각 항목을 구분선으로 나눔
+        return "\n---\n".join(markdown_lines)
+
+    
+    if not os.path.exists(file_path):
+        return "Error: 파일을 찾을 수 없습니다."
+
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    if 'sheet1' in wb.sheetnames:
+        ws = wb['sheet1']
+    else:
+        ws = wb.active
+
+    data = []
+    last_entry = None
+    start_processing = False
+    
+    footer_pattern = re.compile(r'.*(초|중|고)등학교|.*학교생활기록부')
+
+    for row in ws.iter_rows(values_only=True):
+        # 인덱스: B(1), C(2), E(4), F(5), H(7), J(9), N(13)
+        val_b = row[1]  # 번호
+        val_c = row[2]  # 성명
+        val_e = row[4]  # 학년
+        val_f = row[5]  # 영역
+        val_h = row[7]  # 시간
+        val_j = row[9]  # 특기사항
+        val_n = row[13] # 희망분야
+
+        def clean_str(s):
+            return str(s).strip() if s is not None else ""
+
+        str_b = clean_str(val_b)
+        str_c = clean_str(val_c)
+        str_f = clean_str(val_f)
+        str_j = clean_str(val_j)
+        str_n = clean_str(val_n)
+
+        # 1. 헤더 감지
+        if "번 호" in str_b or "성  명" in str_c:
+            start_processing = True
+            continue
+        
+        if not start_processing:
+            continue
+            
+        # 2. [수정] 바닥글/페이지 구분자 건너뛰기 (범용 로직 적용)
+        # B열(번호) 또는 J열(특기사항)에 학교명 패턴이나 '학교생활기록부'가 포함되면 건너뜁니다.
+        if str_j and footer_pattern.search(str_j):
+            continue
+        if str_b and footer_pattern.search(str_b):
+            continue
+
+        # 3. 데이터 처리 로직 판단
+        is_new_student = False
+        
+        # 번호가 있는 경우
+        if str_b and (str_b.isdigit() or len(str_b) < 5):
+            # 이전 학생과 번호/성명이 같으면 페이지 넘어감에 의한 중복 -> 이어지는 내용으로 처리
+            if last_entry and last_entry['번호'] == str_b and last_entry['성명'] == str_c:
+                is_new_student = False
+            else:
+                is_new_student = True
+        else:
+            is_new_student = False
+
+        # --- 로직 실행 ---
+        
+        if is_new_student:
+            # [새로운 항목 등록]
+            note_content = str_j
+            
+            # 진로활동 특수 처리
+            if "진로" in str_f and str_n:
+                # J열 내용이 '희망분야'라는 단어로 시작하면 제거 (중복 방지)
+                note_content = re.sub(r'^희망분야\s*', '', note_content)
+                
+                # 포맷팅 적용
+                formatted_note = f"희망분야: {str_n}\n{note_content}"
+            else:
+                formatted_note = note_content
+            
+            entry = {
+                '번호': str_b,
+                '성명': str_c,
+                '학년': clean_str(val_e),
+                '영역': str_f,
+                '시간': clean_str(val_h),
+                '특기사항': formatted_note
+            }
+            data.append(entry)
+            last_entry = entry
+            
+        elif str_j:
+            # [내용 이어 붙이기]
+            # 헤더 반복 제외
+            if "특기사항" in str_j:
+                continue
+                
+            if last_entry:
+                last_entry['특기사항'] += " " + str_j
+
+    # DataFrame 생성
+    df = pd.DataFrame(data)
+    
+    # 공백 검출 함수 적용 (외부 함수로 가정하고 예외 처리 추가)
+    if not df.empty and '특기사항' in df.columns:
+        try:
+            # mark_multiple_spaces 함수가 정의되어 있다고 가정
+            df['특기사항'] = df['특기사항'].apply(mark_multiple_spaces)
+        except NameError:
+            pass # 해당 함수가 없으면 패스
+
+    # Markdown으로 변환하여 반환
+    markdown_text = df_to_llm_markdown(df)
+    
+    return markdown_text
+
+# 동아리 활동
 def xlsx_club_to_markdown(file_path):
     """
     동아리 활동 엑셀 파일을 읽어 Markdown Table 형식으로 반환
@@ -1010,44 +1381,65 @@ async def on_subject_select(action: cl.Action):
     if subject == "과목별 세부능력 및 특기사항 (생기부 영역별 출력)":
         guide_message = (
             "**[사용법 안내]**\n"
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 과세특(영역별)을 조회하여 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 과세특(활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
     elif subject == "과목별 세부능력 및 특기사항 (교사 입력 과세특 엑셀 파일)":
         guide_message = (
             "**[사용법 안내]**\n"
             "1. NEIS 교과담임-성적-성적처리에서 과목별세부능력및특기사항을 조회하여 [엑셀내려받기] 버튼을 눌러 엑셀 파일(.xlsx)을 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
     elif subject == "행동특성 및 종합의견":
         guide_message = (
             "**[사용법 안내]**\n"
             "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 행동특성 및 종합의견을 조회하여 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
-    elif subject == "창의적 체험활동":
+    elif subject == "창의적 체험활동 (고등학교 2-3학년, 현재학년)":
         guide_message = (
             "**[사용법 안내]**\n"
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동을 조회하여 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
-    elif subject == "창의적 체험활동 (영역별)":
+    elif subject == "창의적 체험활동 (고등학교 2-3학년, 활동별)":
         guide_message = (
             "**[사용법 안내]**\n"
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (영역별)을 조회하여 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
-    elif subject == "창의적 체험활동 (2025 개정 1학년용)":
+    elif subject == "창의적 체험활동 (중학교, 활동별)":
         guide_message = (
             "**[사용법 안내]**\n"
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동을 조회하여 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
+        )
+    elif subject == "창의적 체험활동 (고등학교 1학년, 현재학년)":
+        guide_message = (
+            "**[사용법 안내]**\n"
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
+        )
+    elif subject == "창의적 체험활동 (고등학교 1학년, 활동별)":
+        guide_message = (
+            "**[사용법 안내]**\n"
+            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
     elif subject == "동아리 (교사 입력 엑셀 데이터 파일)":
         guide_message = (
             "**[사용법 안내]**\n"
             "1. NEIS 동아리담임-창의적체험활동-동아리활동관리-학생부자료지록-조회-출력-**XLS Data** 버튼을 눌러서 엑셀 파일로 저장하세요.\n"
-            "2. 아래 버튼을 눌러 파일(.xlsx)을 업로드해주세요."
+            "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
+            "(참고) NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다."
         )
     else:
         guide_message = "엑셀 파일(.xlsx)을 업로드해주세요."
@@ -1120,12 +1512,16 @@ async def on_message(message: cl.Message):
             extracted_text = await cl.make_async(xlsx_subject_to_markdown)(uploaded_file.path)
         elif subject == "행동특성 및 종합의견":
             extracted_text = await cl.make_async(xlsx_behavior_to_markdown)(uploaded_file.path)
-        elif subject == "창의적 체험활동":
+        elif subject == "창의적 체험활동 (고등학교 2-3학년, 현재학년)":
             extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown)(uploaded_file.path)
-        elif subject == "창의적 체험활동 (영역별)":
-            extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown_sectional)(uploaded_file.path)
-        elif subject == "창의적 체험활동 (2025 개정 1학년용)":
+        elif subject == "창의적 체험활동 (고등학교 2-3학년, 활동별)":
+            extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown_sectional_high)(uploaded_file.path)
+        elif subject == "창의적 체험활동 (중학교, 활동별)":
+            extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown_sectional_mid)(uploaded_file.path)
+        elif subject == "창의적 체험활동 (고등학교 1학년, 현재학년)":
             extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown_1st_year)(uploaded_file.path)
+        elif subject == "창의적 체험활동 (고등학교 1학년, 활동별)":
+            extracted_text = await cl.make_async(xlsx_creative_activity_to_markdown_1st_year_sectional)(uploaded_file.path)
         elif subject == "동아리 (교사 입력 엑셀 데이터 파일)":
             extracted_text = await cl.make_async(xlsx_club_to_markdown)(uploaded_file.path)
         else:
