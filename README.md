@@ -32,7 +32,7 @@ AI(Google Gemini)를 활용하여 고등학교 학교생활기록부(세특, 행
 
 ### 1. 저장소 복제 및 의존성 설치
 ```bash
-git clone [https://github.com/your-username/school-record-checker.git](https://github.com/your-username/school-record-checker.git)
+git clone [https://github.com/kungmo/school_record_checker.git](https://github.com/kungmo/school_record_checker.git)
 cd school-record-checker
 uv pip install -r requirements.txt
 ```
