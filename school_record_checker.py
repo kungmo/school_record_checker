@@ -108,11 +108,11 @@ async def validate_api_key(api_key: str):
 
 # --- 과목별 시스템 프롬프트 정의 ---
 PROMPTS = {
-    "과목별 세부능력 및 특기사항 (생기부 영역별 출력)": """
+    "과세특 (담임용 생기부 영역별 출력, 고등학교)": """
 # Role: 고등학교 과목별 세부능력 및 특기사항 내용을 꼼꼼히 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
-# 생활기록부 본문 내용 parsing 상태: 과목과 학생 번호(No.) 학년, 학기를 기준으로 동료 교사가 쓴 세부능력 및 특기사항이 쓰여 있다.
+# 생활기록부 본문 내용 parsing 상태: 과목과 학생 번호, 학년, 학기를 기준으로 동료 교사가 쓴 세부능력 및 특기사항이 쓰여 있다.
 # To Dos:
     1. 오타가 있는 경우 반드시 알려줘야 한다.
     2. 문장 자체에 내재된 언어학적인 오류 여부를 점검한다.
@@ -125,13 +125,13 @@ PROMPTS = {
        - 틀린 예: ~한다. ~했다.
        - **주의**: 문장 중간의 연결 표현(~하며, ~하고, ~하면서 등)은 명사형 종결어미가 아니므로 점검 대상이 아니다. 오직 마침표(.) 직전의 종결어미만 점검한다.
 # [중요] 답변 출력 형식:
-반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
+과목별로 모든 학생에 대하여 반드시 아래의 마크다운 형식을 지켜서 답변하시오. 서론이나 잡담 없이 바로 본론으로 들어가시오.
 ## [학생별 정밀 검토]
-### 학생 번호: 1, 학생 이름: (학생명), 과목: (검토한 과목), 학년/학기: (O학년 O학기)
+### 과목: (검토한 과목), 학생 번호: 1, 학생 이름: (학생명), 학년/학기: (O학년 O학기)
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
 
-### 학생 번호: 2, 학생 이름: (학생명), 과목: (검토한 과목), 학년/학기: (O학년 O학기)
+### 과목: (검토한 과목), 학생 번호: 2, 학생 이름: (학생명), 학년/학기: (O학년 O학기)
 ...
 
 ## [종합 검토 의견]
@@ -332,7 +332,7 @@ PROMPTS = {
 - **검토 결과**: [적절 / 수정 필요 / 오류]
 - **상세 내용**: (내용 작성)
 ### 학생 번호: 2, 학생 이름: (학생명), 학년: (O학년)""",
-    "동아리 (교사 입력 엑셀 데이터 파일)": """
+    "동아리 (교사 입력 엑셀 파일)": """
 # Role: 고등학교 동아리 특기사항 내용을 꼼꼼히 검토하는 동료 선생님
 # 시점: 현재 연도는 2025년이다.
 # 주의사항: 본문 내용은 원문의 문구 그대로 사용해야만 한다.
@@ -375,101 +375,51 @@ def mark_multiple_spaces(text):
 
 # 과목별 세부능력 및 특기사항 변환 함수 (담임 출력)
 def excel_to_clean_markdown_subject(file_path):
-    """Excel 파일을 읽어서 깔끔한 Markdown으로 변환 (과목별 세부능력)"""
-    try:
-        # 1. CSV/Excel 파일 읽기 (헤더 없이 읽어서 구조 파악)
-        df = pd.read_excel(file_path, header=None)
-        
-        # 2. 실제 헤더가 있는 행 찾기 ('과 목' 또는 '과목'이 포함된 행)
-        header_candidates = df[df.apply(lambda row: row.astype(str).str.contains('과.*목', regex=True).any(), axis=1)]
-        
-        if header_candidates.empty:
-            return "오류: '과목' 헤더를 찾을 수 없습니다. 파일 형식을 확인해주세요."
-        
-        header_row_idx = header_candidates.index[0]
-        
-        # 3. 헤더 설정 및 데이터 슬라이싱
-        df.columns = df.iloc[header_row_idx]
-        df = df.iloc[header_row_idx + 1:].reset_index(drop=True)
-        
-        # 4. 컬럼명 정리 (공백 제거)
-        df.columns = [str(c).replace(' ', '').strip() for c in df.columns]
-        
-        # 5. 필요한 컬럼 확인 및 선택
-        required_cols = ['과목', '학년', '학기', '번호', '성명', '세부능력및특기사항']
-        existing_cols = [c for c in required_cols if c in df.columns]
-        
-        if '세부능력및특기사항' not in existing_cols:
-            return "오류: '세부능력및특기사항' 컬럼을 찾을 수 없습니다."
-        
-        df = df[existing_cols]
-        
-        # 6. 불필요한 행 제거
-        # 반복되는 헤더 삭제
-        df = df[~df['과목'].astype(str).str.contains('과.*목', regex=True, na=False)]
-        
-        # 세부능력 내용이 없는 행 삭제
-        df = df.dropna(subset=['세부능력및특기사항'])
-        
-        # [수정] 메타데이터 행 삭제 로직 개선
-        # 기존: keywords 리스트에 '고등학교'가 있어 본문에 '고등학교'가 있으면 삭제되는 문제 해결
-        keywords = ['학교생활기록부', '사용자명']
-        
-        # (1) 특정 키워드(학교생활기록부 등)가 포함된 행 찾기
-        mask_keywords = df['세부능력및특기사항'].astype(str).apply(lambda x: any(k in x for k in keywords))
-        
-        # (2) 내용 전체가 'OO초/중/고등학교' 형식인 행 찾기 (정규표현식 사용)
-        # ^:시작, $:끝 -> 문장 중간에 학교명이 있는 경우는 보존됨
-        mask_school = df['세부능력및특기사항'].astype(str).str.contains(r'^\s*.*(?:초등|중|고등)학교\s*$', regex=True, na=False)
-        
-        # 두 조건 중 하나라도 해당되면 제거
-        df = df[~(mask_keywords | mask_school)]
-        
-        # 7. 데이터 채우기 (Forward Fill)
-        cols_to_fill = [c for c in ['과목', '학년', '학기', '번호', '성명'] if c in df.columns]
-        df[cols_to_fill] = df[cols_to_fill].ffill()
-        
-        # 8. 번호 정리
-        if '번호' in df.columns:
-            df['번호'] = pd.to_numeric(df['번호'], errors='coerce')
-            df = df.dropna(subset=['번호'])
-            df['번호'] = df['번호'].astype(int)
-        
-        # 9. 그룹화하여 텍스트 합치기
-        group_cols = [c for c in ['과목', '학년', '학기', '번호', '성명'] if c in df.columns]
-        grouped = df.groupby(group_cols)['세부능력및특기사항'].apply(
-            lambda x: mark_multiple_spaces(' '.join(x.astype(str))) # 마킹 함수 적용
-        ).reset_index()
-        
-        # 10. 정렬
-        sort_cols = [c for c in ['과목', '학기', '번호'] if c in grouped.columns]
-        grouped = grouped.sort_values(by=sort_cols)
-        
-        # 11. Markdown 생성
-        markdown_output = []
-        
-        for _, row in grouped.iterrows():
-            subject = row.get('과목', '미상')
-            name = row.get('성명', '미상')
-            number = row.get('번호', '?')
-            grade = row.get('학년', '?')
-            semester = row.get('학기', '?')
-            content = row['세부능력및특기사항']
-            
-            md_block = f"""
-### {subject} - {name} (No. {number})
-- **학년/학기:** {grade}학년 {semester}학기
-- **세부능력 및 특기사항:**
-> {content}
-
----
-"""
-            markdown_output.append(md_block)
-        
-        return "\n".join(markdown_output)
+    """
+    종이 출력용 엑셀 파일을 읽어 정제하고,
+    LLM이 긴 컨텍스트에서도 헷갈리지 않도록 명시적인 항목 나열 방식의 
+    Markdown 문자열로 반환합니다.
+    """
+    # 1. 데이터 로드 및 전처리 (이전과 동일)
+    df = pd.read_excel(file_path, header=9, usecols=[1, 2, 3, 4, 5, 7])
+    df.columns = ['과목', '학년', '학기', '번호', '성명', '세부능력 및 특기사항']
     
-    except Exception as e:
-        return f"오류: 파일 처리 중 문제가 발생했습니다. {str(e)}"
+    df['과목'] = df['과목'].str.replace(' ', '')
+    df['성명'] = df['성명'].str.replace(' ', '')
+    
+    df = df.dropna(subset=['세부능력 및 특기사항'])
+    df = df[df['세부능력 및 특기사항'].str.replace(' ', '') != '세부능력및특기사항']
+    
+    id_cols = ['과목', '학년', '학기', '번호', '성명']
+    df[id_cols] = df[id_cols].ffill()
+    
+    df['번호'] = df['번호'].astype(int)
+    
+    # 2. 내용 병합 및 공백 마킹
+    df_clean = df.groupby(id_cols)['세부능력 및 특기사항'].apply(lambda x: ''.join(x)).reset_index()
+    df_clean['세부능력 및 특기사항'] = df_clean['세부능력 및 특기사항'].apply(mark_multiple_spaces)
+    
+    # 3. [변경됨] 명시적인 Key-Value 형태의 Markdown 문자열 생성
+    result_lines = []
+    
+    for _, row in df_clean.iterrows():
+        # 각 학생별 블록 생성
+        record = (
+            f"--- 학생 데이터 시작 ---\n"
+            f"**과목**: {row['과목']}\n"
+            f"**학년**: {row['학년']}\n"
+            f"**학기**: {row['학기']}\n"
+            f"**번호**: {row['번호']}\n"
+            f"**성명**: {row['성명']}\n"
+            f"**세부능력 및 특기사항**:\n{row['세부능력 및 특기사항']}\n"
+            f"\n"  # 학생 간 구분을 위한 줄바꿈
+        )
+        result_lines.append(record)
+    
+    # 전체 텍스트 합치기
+    final_text = "".join(result_lines)
+    
+    return final_text
 
 # 과세특 (교사 입력 엑셀 파일, 고등학교)
 def xlsx_subject_to_markdown_high(file_path):
@@ -1518,72 +1468,72 @@ async def on_subject_select(action: cl.Action):
     
     guide_message = ""
 
-    if subject == "과목별 세부능력 및 특기사항 (생기부 영역별 출력)":
+    if subject == "과세특 (담임용 생기부 영역별 출력, 고등학교)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 과세특(활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 과세특(활동별)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
-    elif subject == "과세특 (교사 입력 과세특 엑셀 파일, 고등학교)":
+    elif subject == "과세특 (교사 입력 엑셀 파일, 고등학교)":
         guide_message = (
-            "1. NEIS 교과담임-성적-성적처리에서 과목별세부능력및특기사항을 조회하여 [엑셀내려받기] 버튼을 눌러 엑셀 파일(.xlsx)을 저장하세요.\n"
+            "1. **NEIS 교과담임-성적-성적처리에서 과목별세부능력및특기사항을 조회하여 [엑셀내려받기] 버튼**을 눌러 엑셀 파일(.xlsx)을 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
-    elif subject == "과세특 (교사 입력 과세특 엑셀 파일, 중학교)":
+    elif subject == "과세특 (교사 입력 엑셀 파일, 중학교)":
         guide_message = (
-            "1. NEIS 교과담임-성적-성적처리에서 과목별세부능력및특기사항을 조회하여 [엑셀내려받기] 버튼을 눌러 엑셀 파일(.xlsx)을 저장하세요.\n"
+            "1. **NEIS 교과담임-성적-성적처리에서 과목별세부능력및특기사항을 조회하여 [엑셀내려받기] 버튼**을 눌러 엑셀 파일(.xlsx)을 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "행동특성 및 종합의견":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 행동특성 및 종합의견을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 행동특성 및 종합의견**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "창의적 체험활동 (고등학교 2-3학년, 현재학년)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "창의적 체험활동 (고등학교 2-3학년, 활동별)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "창의적 체험활동 (중학교, 활동별)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "창의적 체험활동 (고등학교 1학년, 현재학년)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (현재학년)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
     elif subject == "창의적 체험활동 (고등학교 1학년, 활동별)":
         guide_message = (
-            "1. NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)을 조회하여 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 학급담임-학생부-학교생활기록부-학생부 항목별 조회 출력 메뉴에서 창의적 체험활동 (활동별)**을 조회하여 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
         )
-    elif subject == "동아리 (교사 입력 엑셀 데이터 파일)":
+    elif subject == "동아리 (교사 입력 엑셀 파일)":
         guide_message = (
-            "1. NEIS 동아리담임-창의적체험활동-동아리활동관리-학생부자료기록-조회-출력-**XLS Data** 버튼을 눌러서 엑셀 파일로 저장하세요.\n"
+            "1. **NEIS 동아리담임-창의적체험활동-동아리활동관리-학생부자료기록-조회-출력-XLS Data** 버튼을 눌러서 엑셀 파일로 저장하세요.\n"
             "2. 아래에 있는 파일 첨부 버튼을 눌러 파일(.xlsx)을 업로드해주세요.\n\n"
             "[참고1] NEIS에서 xlsx 파일을 받아서 Microsoft Excel로 열면 파일이 손상되었다고 나오는 경우가 있습니다. 이때는 복구하신 후, 그 파일을 올리면 정상적으로 인식이 될 것입니다.\n"
             "[참고2] 요즘 구글 Gemini 사용량이 많은지 구글에서 503 Service Unavailable 오류가 많이 납니다. 503 오류가 나면 구글 서버 잘못이니 당황하지 마시고, 몇 분 있다가 다시 시도하세요."
@@ -1653,7 +1603,7 @@ async def on_message(message: cl.Message):
         
         # 파일 변환 로직 (기존과 동일하게 함수 호출)
         # (주의: 이전에 정의한 함수명을 정확히 사용해야 합니다)
-        if subject == "과목별 세부능력 및 특기사항 (생기부 영역별 출력)":
+        if subject == "과세특 (담임용 생기부 영역별 출력, 고등학교)":
             extracted_text = await cl.make_async(excel_to_clean_markdown_subject)(uploaded_file.path)
         elif subject == "과세특 (교사 입력 엑셀 파일, 고등학교)":
             extracted_text = await cl.make_async(xlsx_subject_to_markdown_high)(uploaded_file.path)
